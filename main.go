@@ -46,9 +46,7 @@ func main() {
 		tool.SaveDataToLocal(current, TargetPath)
 		// 将新的文件进行对比
 		tool.CompareData(&latest, &current)
-		tool.SaveDataToLocal(current, ".")
 		tool.SortFolder(&current)
 		tool.PrintFolder(&current, "")
-		// fmt.Printf("save: %#v\n", save)
 	}
 }

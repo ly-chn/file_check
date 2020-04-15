@@ -19,6 +19,8 @@ const (
 	// 数据文件后缀
 	suffix = ".json"
 )
+
+// 状态
 const (
 	statusUnchanged = "无变化"
 	statusModified  = "已修改"
@@ -26,15 +28,65 @@ const (
 	statusNewFile   = "新增"
 )
 
+// 颜色
+var (
+	greenBg      = string([]byte{27, 91, 57, 55, 59, 52, 50, 109})
+	whiteBg      = string([]byte{27, 91, 57, 48, 59, 52, 55, 109})
+	yellowBg     = string([]byte{27, 91, 57, 48, 59, 52, 51, 109})
+	redBg        = string([]byte{27, 91, 57, 55, 59, 52, 49, 109})
+	blueBg       = string([]byte{27, 91, 57, 55, 59, 52, 52, 109})
+	magentaBg    = string([]byte{27, 91, 57, 55, 59, 52, 53, 109})
+	cyanBg       = string([]byte{27, 91, 57, 55, 59, 52, 54, 109})
+	green        = string([]byte{27, 91, 51, 50, 109})
+	white        = string([]byte{27, 91, 51, 55, 109})
+	yellow       = string([]byte{27, 91, 51, 51, 109})
+	red          = string([]byte{27, 91, 51, 49, 109})
+	blue         = string([]byte{27, 91, 51, 52, 109})
+	magenta      = string([]byte{27, 91, 51, 53, 109})
+	cyan         = string([]byte{27, 91, 51, 54, 109})
+	reset        = string([]byte{27, 91, 48, 109})
+	disableColor = false
+)
+
 var latest = ""
 
+// 输出文件夹及其文件,包含状态
 func PrintFolder(folder *Folder, indent string) {
-	fmt.Println("|"+indent, "📁"+folder.Name)
+	var text string
+	if folder.Name == "" {
+		text = "📁目标文件夹"
+	} else {
+		text = "📁" + folder.Name
+	}
+	prefix := "|" + indent
+
+	printWithColor(folder.Status, prefix, text)
 	for _, child := range folder.Children {
 		PrintFolder(child, indent+"--")
 	}
 	for _, file := range folder.Files {
-		fmt.Println("|"+indent, "🖹"+file.Name)
+		printWithColor(file.Status, prefix, "🖹"+file.Name)
+	}
+}
+
+// 根据状态输出带颜色的文字
+func printWithColor(status string, prefix string, text string) {
+	switch status {
+	case statusDeleted:
+		fmt.Println(prefix, redBg, text, reset)
+		break
+	case statusNewFile:
+		fmt.Println(prefix, greenBg, text, reset)
+		break
+	case statusUnchanged:
+		fmt.Println(prefix, text)
+		break
+	case statusModified:
+		fmt.Println(prefix, blueBg, text, reset)
+		break
+	default:
+		fmt.Println(prefix, text, "---解析异常")
+		break
 	}
 }
 
@@ -52,6 +104,8 @@ func SortFolder(folder *Folder) {
 // @current 本次的校对信息
 func CompareData(oldFolder, currentFolder *Folder) {
 	compareFolder(oldFolder, currentFolder)
+	// 将未定义的文件夹设置为新增,省的再次遍历两个树了
+	setFolderBeStatus(currentFolder, statusNewFile)
 }
 
 // 判断文件的状态,
@@ -98,14 +152,22 @@ func compareFolder(oldFolder, currentFolder *Folder) {
 	// 对比文件
 	compareFile(oldFolder, currentFolder)
 	// 已删除
-	if currentFolder.Path == "" {
-		oldFolder.Status = statusDeleted
-		setFolderBeDeleted(oldFolder)
-		currentFolder = oldFolder
+	var currentFolderChild = new(Folder)
+Deleted:
+	for _, oldFolderChild := range oldFolderChildren {
+		for _, currentFolderChild = range currentFolderChildren {
+			if oldFolderChild.Path == currentFolderChild.Path {
+				continue Deleted
+			}
+		}
+		oldFolderChild.Status = statusDeleted
+		setFolderBeStatus(oldFolderChild, statusDeleted)
+		currentFolder.Children = append(currentFolder.Children, oldFolderChild)
 	}
+	// 对比差异
 	for _, currentFolderChild := range currentFolderChildren {
 		if currentFolderChild.Status == statusNewFile || currentFolderChild.Status == statusDeleted {
-			compareFolder(nil, currentFolderChild)
+			compareFolder(&Folder{}, currentFolderChild)
 			continue
 		}
 		for _, oldFolderChild := range oldFolderChildren {
@@ -113,56 +175,21 @@ func compareFolder(oldFolder, currentFolder *Folder) {
 				compareFolder(oldFolderChild, currentFolderChild)
 			}
 		}
-
 	}
 }
 
-// func compareFolder(oldFolder, currentFolder *Folder) {
-//     oldFolderChildren := oldFolder.Children
-//     currentFolderChildren := currentFolder.Children
-//     // 未被删除的文件夹
-//     for _, currentFolderChild := range currentFolderChildren {
-//         for _, oldFolderChild := range oldFolderChildren {
-//             currentFolder.Status = statusNewFile
-//             if oldFolderChild.Path == currentFolderChild.Path {
-//                 // 路径一样视为同一个文件夹,判断修改状态
-//                 compareFile(oldFolderChild, currentFolderChild)
-//                 compareFolder(oldFolderChild, currentFolderChild)
-//                 currentFolder.Status = statusModified
-//                 // todo: 错误的被识别为新增
-//                 fmt.Println("-=-=-=-=-")
-//                 fmt.Printf("oldFolderChild.Md5: %#v\n", oldFolderChild.Md5)
-//                 fmt.Printf("currentFolderChild.Md5: %#v\n", currentFolderChild.Md5)
-//                 if oldFolderChild.Md5 == currentFolderChild.Md5 {
-//                     fmt.Printf("1111: %#v\n", 1111)
-//                     currentFolder.Status = statusUnchanged
-//                 }
-//             }
-//         }
-//     }
-// Deleted:
-//     for _, oldFolderChild := range oldFolderChildren {
-//         for _, currentFolderChild := range currentFolderChildren {
-//             if currentFolderChild.Path == oldFolderChild.Path {
-//                 continue Deleted
-//             }
-//         }
-//         oldFolderChild.Status = statusDeleted
-//         // 将oldFolderChild遍历使每个文件状态都变未已删除
-//         setFolderBeDeleted(oldFolderChild)
-//         currentFolder.Children = append(currentFolderChildren, oldFolderChild)
-//     }
-//
-// }
-
 // 将一个文件夹及其子文件标记为已删除
-func setFolderBeDeleted(folder *Folder) {
-	folder.Status = statusDeleted
+func setFolderBeStatus(folder *Folder, status string) {
+	if folder.Status == "" {
+		folder.Status = status
+	}
 	for _, file := range folder.Files {
-		file.Status = statusDeleted
+		if file.Status == "" {
+			file.Status = status
+		}
 	}
 	for _, child := range folder.Children {
-		setFolderBeDeleted(child)
+		setFolderBeStatus(child, status)
 	}
 }
 
